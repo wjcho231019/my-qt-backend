@@ -1,251 +1,537 @@
-<!DOCTYPE html>
-<html lang="ko">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>오늘의 성경 QT</title>
-    <!-- 구글 폰트 -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --primary: #4F46E5;
-            --primary-hover: #4338CA;
-            --bg-color: #F3F4F6;
-            --card-bg: #FFFFFF;
-            --text-main: #1F2937;
-            --text-sub: #6B7280;
-        }
+import os
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Noto Sans KR', -apple-system, BlinkMacSystemFont, sans-serif;
-        }
+import json
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            padding: 20px;
-        }
+import random
 
-        .container {
-            width: 100%;
-            max-width: 480px;
-            background: var(--card-bg);
-            border-radius: 24px;
-            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
-            padding: 32px 24px;
-        }
+import re
 
-        .header {
-            text-align: center;
-            margin-bottom: 28px;
-        }
+from fastapi import FastAPI
 
-        .subtitle-tag {
-            display: inline-block;
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--primary);
-            background-color: #EEF2FF;
-            padding: 4px 12px;
-            border-radius: 20px;
-            margin-bottom: 10px;
-            letter-spacing: 0.5px;
-        }
+from fastapi.middleware.cors import CORSMiddleware
 
-        .title {
-            font-size: 24px;
-            font-weight: 700;
-            color: #111827;
-            margin-bottom: 8px;
-        }
+import google.generativeai as genai
 
-        .description {
-            font-size: 14px;
-            color: var(--text-sub);
-            line-height: 1.5;
-        }
 
-        .action-area {
-            margin-bottom: 24px;
-        }
 
-        .btn-fetch {
-            width: 100%;
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            padding: 16px 20px;
-            border-radius: 14px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
-            transition: all 0.2s ease;
-            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.2);
-        }
+app = FastAPI()
 
-        .btn-fetch:hover {
-            background-color: var(--primary-hover);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 16px rgba(79, 70, 229, 0.3);
-        }
 
-        .btn-fetch svg {
-            width: 20px;
-            height: 20px;
-            fill: none;
-            stroke: currentColor;
-            stroke-width: 2;
-        }
 
-        .status-msg {
-            font-size: 15px;
-            color: var(--primary);
-            text-align: center;
-            margin: 16px 0;
-            font-weight: 700;
-        }
+app.add_middleware(
 
-        .content-section {
-            display: flex;
-            flex-direction: column;
-            gap: 16px;
-        }
+    CORSMiddleware,
 
-        .card {
-            background-color: #F9FAFB;
-            border: 1px solid #F3F4F6;
-            border-radius: 16px;
-            padding: 20px;
-            transition: all 0.2s ease;
-        }
+    allow_origins=["*"],
 
-        .card-title {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 16px;
-            font-weight: 700;
-            color: #111827;
-            margin-bottom: 10px;
-        }
+    allow_methods=["*"],
 
-        .card-body {
-            font-size: 14px;
-            color: #4B5563;
-            line-height: 1.6;
-            white-space: pre-wrap;
-        }
-    </style>
-</head>
-<body>
+    allow_headers=["*"],
 
-    <div class="container">
-        <!-- 헤더 영역 -->
-        <div class="header">
-            <span class="subtitle-tag">Daily Bible Devotional</span>
-            <h1 class="title">오늘의 성경 QT</h1>
-            <p class="description">오늘 나에게 주시는 말씀과<br>삶을 정돈하는 묵상</p>
-        </div>
+)
 
-        <!-- 버튼 영역 -->
-        <div class="action-area">
-            <button class="btn-fetch" id="fetchBtn">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
-                    <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
-                </svg>
-                오늘의 말씀 읽기
-            </button>
-        </div>
 
-        <!-- 로딩/상태 메시지 -->
-        <div class="status-msg" id="statusMsg">버튼을 눌러 오늘의 말씀을 확인하세요.</div>
 
-        <!-- 결과 카드 영역 -->
-        <div class="content-section" id="resultArea">
-            <div class="card">
-                <div class="card-title">📖 성경 본문</div>
-                <div class="card-body" id="verse">버튼을 누르면 오늘의 성경 말씀이 여기에 출력됩니다.</div>
-            </div>
+# 영어 성경 이름을 한글 성경 이름으로 변환 매핑
 
-            <div class="card">
-                <div class="card-title">💡 말씀 해석</div>
-                <div class="card-body" id="interpretation">본문 내용이 여기에 표시됩니다.</div>
-            </div>
+ENGLISH_TO_KOREAN = {
 
-            <div class="card">
-                <div class="card-title">❓ 오늘 삶에 던지는 질문</div>
-                <div class="card-body" id="questions">본문 내용이 여기에 표시됩니다.</div>
-            </div>
+    # 구약 (39권)
 
-            <div class="card">
-                <div class="card-title">🙏 오늘의 마무리 기도</div>
-                <div class="card-body" id="prayer">본문 내용이 여기에 표시됩니다.</div>
-            </div>
-        </div>
-    </div>
+    "Genesis": "창세기", 
 
-    <!-- 자바스크립트 연동 코드 -->
-    <script>
-        // ⚠️ [필수] 본인의 실제 Render 백엔드 주소로 입력하세요! (예: https://my-qt-app.onrender.com)
-        const RENDER_SERVER_URL = "https://your-app-name.onrender.com"; 
+    "Exodus": "출애굽기", 
 
-        const fetchBtn = document.getElementById('fetchBtn');
-        const statusMsg = document.getElementById('statusMsg');
-        const verse = document.getElementById('verse');
-        const interpretation = document.getElementById('interpretation');
-        const questions = document.getElementById('questions');
-        const prayer = document.getElementById('prayer');
+    "Leviticus": "레위기", 
 
-        fetchBtn.addEventListener('click', async () => {
-            fetchBtn.disabled = true;
-            fetchBtn.style.opacity = "0.7";
-            statusMsg.innerText = "⏳ 말씀과 묵상을 불러오는 중입니다... (약 5~10초 소요)";
+    "Numbers": "민수기", 
 
-            try {
-                const response = await fetch(`${RENDER_SERVER_URL}/api/daily-qt`);
+    "Deuteronomy": "신명기",
+
+    "Joshua": "여호수아", 
+
+    "Judges": "사사기", 
+
+    "Ruth": "룻기", 
+
+    "1Samuel": "사무엘상", 
+
+    "2Samuel": "사무엘하", 
+
+    "1Kings": "열왕기상", 
+
+    "2Kings": "열왕기하", 
+
+    "1Chronicles": "역대상", 
+
+    "2Chronicles": "역대하", 
+
+    "Ezra": "에스라", 
+
+    "Nehemiah": "느헤미야", 
+
+    "Esther": "에스더", 
+
+    "Job": "욥기", 
+
+    "Psalms": "시편", 
+
+    "Psalm": "시편", 
+
+    "Proverbs": "잠언", 
+
+    "Ecclesiastes": "전도서", 
+
+    "SongofSolomon": "아가", 
+
+    "SongofSongs": "아가", 
+
+    "Isaiah": "이사야", 
+
+    "Jeremiah": "예레미야", 
+
+    "Lamentations": "예레미야애가", 
+
+    "Ezekiel": "에스겔", 
+
+    "Daniel": "다니엘", 
+
+    "Hosea": "호세아", 
+
+    "Joel": "요엘", 
+
+    "Amos": "아모스", 
+
+    "Obadiah": "오바다", 
+
+    "Jonah": "요나", 
+
+    "Micah": "미가", 
+
+    "Nahum": "나훔", 
+
+    "Habakkuk": "하박국", 
+
+    "Zephaniah": "스바냐", 
+
+    "Haggai": "학개", 
+
+    "Zechariah": "스가랴", 
+
+    "Malachi": "말라기",
+
+
+
+    # 신약 (27권)
+
+    "Matthew": "마태복음", 
+
+    "Mark": "마가복음", 
+
+    "Luke": "누가복음", 
+
+    "John": "요한복음", 
+
+    "Acts": "사도행전", 
+
+    "Romans": "로마서", 
+
+    "1Corinthians": "고린도전서", 
+
+    "2Corinthians": "고린도후서", 
+
+    "Galatians": "갈라디아서", 
+
+    "Ephesians": "에베소서", 
+
+    "Philippians": "빌립보서", 
+
+    "Colossians": "골로새서", 
+
+    "1Thessalonians": "데살로니가전서", 
+
+    "2Thessalonians": "데살로니가후서", 
+
+    "1Timothy": "디모데전서", 
+
+    "2Timothy": "디모데후서", 
+
+    "Titus": "디도서", 
+
+    "Philemon": "빌레몬서", 
+
+    "Hebrews": "히브리서", 
+
+    "James": "야고보서", 
+
+    "1Peter": "베드로전서", 
+
+    "2Peter": "베드로후서", 
+
+    "1John": "요한일서", 
+
+    "2John": "요한이서", 
+
+    "3John": "요한삼서", 
+
+    "Jude": "유다서", 
+
+    "Revelation": "요한계시록"
+
+}
+
+
+
+BIBLE_DATA = {}
+
+QT_CACHE = {}
+
+CACHE_FILE = "qt_cache.json"
+
+
+
+# 캐시 파일 불러오기
+
+if os.path.exists(CACHE_FILE):
+
+    try:
+
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+
+            QT_CACHE = json.load(f)
+
+    except Exception:
+
+        QT_CACHE = {}
+
+
+
+def save_cache():
+
+    try:
+
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+
+            json.dump(QT_CACHE, f, ensure_ascii=False, indent=2)
+
+    except Exception as e:
+
+        print("Cache save error:", e)
+
+
+
+# bible.json 데이터 로드
+
+try:
+
+    with open("bible.json", "r", encoding="utf-8") as f:
+
+        raw_data = json.load(f)
+
+
+
+    for book_item in raw_data:
+
+        raw_book = str(book_item.get("book", ""))
+
+        clean_key = raw_book.replace(" ", "")
+
+        book_name = ENGLISH_TO_KOREAN.get(clean_key, raw_book)
+
+        
+
+        if book_name not in BIBLE_DATA:
+
+            BIBLE_DATA[book_name] = {}
+
+            
+
+        for ch_item in book_item.get("chapters", []):
+
+            ch_num = str(ch_item.get("chapter", ""))
+
+            if ch_num not in BIBLE_DATA[book_name]:
+
+                BIBLE_DATA[book_name][ch_num] = {}
+
                 
-                if (!response.ok) {
-                    throw new Error(`서버 응답 에러: ${response.status}`);
-                }
 
-                const data = await response.json();
+            for v_item in ch_item.get("verses", []):
 
-                statusMsg.innerText = `📖 ${data.reference}`;
-                verse.innerText = data.verse || "성경 본문을 불러오지 못했습니다.";
-                
-                let questionText = "";
-                if (Array.isArray(data.questions)) {
-                    questionText = data.questions.map((q, idx) => `${idx + 1}. ${q}`).join("\n\n");
-                } else {
-                    questionText = data.questions;
-                }
+                v_num = str(v_item.get("verse", ""))
 
-                interpretation.innerText = data.exposition || "해석 내용을 불러오지 못했습니다.";
-                questions.innerText = questionText || "질문 내용을 불러오지 못했습니다.";
-                prayer.innerText = data.prayer || "기도문 내용을 불러오지 못했습니다.";
+                v_text = str(v_item.get("text", ""))
 
-            } catch (error) {
-                console.error("Fetch Error:", error);
-                statusMsg.innerText = "❌ 불러오기에 실패했습니다. Render 서버 주소 및 서버 상태를 확인해주세요.";
-            } finally {
-                fetchBtn.disabled = false;
-                fetchBtn.style.opacity = "1";
-            }
-        });
-    </script>
-</body>
-</html>
+                BIBLE_DATA[book_name][ch_num][v_num] = v_text
+
+except Exception as e:
+
+    print("JSON Load Error:", e)
+
+
+
+@app.get("/")
+
+def read_root():
+
+    return {"status": "QT Backend Server is Running!"}
+
+
+
+def get_random_bible_passage():
+
+    if not BIBLE_DATA:
+
+        return "요한복음 3:16", "16절: 하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니..."
+
+
+
+    book = random.choice(list(BIBLE_DATA.keys()))
+
+    chapter = random.choice(list(BIBLE_DATA[book].keys()))
+
+    verses_dict = BIBLE_DATA[book][chapter]
+
+    
+
+    verse_numbers = [int(v) for v in verses_dict.keys() if str(v).isdigit()]
+
+    if not verse_numbers:
+
+        return "요한복음 3:16", "16절: 하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니..."
+
+        
+
+    verse_numbers.sort()
+
+    max_v = max(verse_numbers)
+
+    
+
+    target_count = random.randint(8, 12)
+
+    valid_starts = [v for v in verse_numbers if max_v - v + 1 >= 6]
+
+    if not valid_starts:
+
+        valid_starts = verse_numbers
+
+        
+
+    start_v = random.choice(valid_starts)
+
+    end_v = min(start_v + target_count - 1, max_v)
+
+    
+
+    passage_text = []
+
+    for v_num in range(start_v, end_v + 1):
+
+        text = verses_dict.get(str(v_num), "")
+
+        if text:
+
+            passage_text.append(f"{v_num}절: {text}")
+
+            
+
+    reference = f"{book} {chapter}:{start_v}" if start_v == end_v else f"{book} {chapter}:{start_v}-{end_v}"
+
+    full_text = "\n".join(passage_text)
+
+    
+
+    return reference, full_text
+
+
+
+@app.get("/api/daily-qt")
+
+async def get_daily_qt():
+
+    reference, verse_text = get_random_bible_passage()
+
+    
+
+    # 1. 이미 해석해 둔 구절(캐시)이 있는지 확인
+
+    if reference in QT_CACHE:
+
+        print(f"[Cache Hit] '{reference}' - 기존 생성된 해석을 재사용합니다.")
+
+        cached_data = QT_CACHE[reference]
+
+        return {
+
+            "reference": reference,
+
+            "verse": verse_text,
+
+            "exposition": cached_data.get("exposition"),
+
+            "questions": cached_data.get("questions"),
+
+            "prayer": cached_data.get("prayer")
+
+        }
+
+
+
+    # 2. 캐시에 없으면 제미나이 API 호출
+
+    api_key = os.environ.get("GEMINI_API_KEY")
+
+    if not api_key:
+
+        return {
+
+            "reference": reference,
+
+            "verse": verse_text,
+
+            "exposition": "GEMINI_API_KEY 환경 변수가 설정되지 않았습니다.",
+
+            "questions": ["Render 환경 변수를 확인해주세요.", "API Key 설정을 확인해주세요."],
+
+            "prayer": "서버 환경변수 설정이 필요합니다."
+
+        }
+
+        
+
+    try:
+
+        genai.configure(api_key=api_key)
+
+        
+
+        generation_config = genai.GenerationConfig(
+
+            response_mime_type="application/json",
+
+            temperature=0.7
+
+        )
+
+        
+
+        model = genai.GenerativeModel(
+
+            model_name="gemini-2.5-flash",
+
+            generation_config=generation_config
+
+        )
+
+        
+
+        prompt = f"""
+
+        당신은 신학적 깊이와 따뜻한 마음을 가진 성경 묵상 가이드입니다.
+
+        아래 주어진 [성경 구절]을 직접 읽고 분석하여, '이 본문 내용에만 들어맞는' 맞춤형 QT 해설, 질문, 기도문을 작성하세요.
+
+
+
+        [성경 구절]
+
+        구절 위치: {reference}
+
+        본문 내용:
+
+        {verse_text}
+
+
+
+        [작성 조건]
+
+        1. exposition: 위 성경 구절의 핵심 메시지와 구체적 의미를 3-4문장으로 따뜻하게 해석하세요.
+
+        2. questions: 위 성경 구절에 등장하는 인물, 배경, 메시지와 직접 관련된 질문 2가지를 작성하세요.
+
+        3. prayer: 위 성경 구절의 메시지를 담아 하나님께 드리는 결단의 기도문을 작성하세요.
+
+
+
+        다음 JSON 구조로만 응답하세요:
+
+        {{
+
+          "exposition": "성경 구절 해설",
+
+          "questions": [
+
+            "본문 맞춤 질문 1",
+
+            "본문 맞춤 질문 2"
+
+          ],
+
+          "prayer": "본문 맞춤 기도문"
+
+        }}
+
+        """
+
+        
+
+        response = model.generate_content(prompt)
+
+        
+
+        res_text = response.text.strip()
+
+        res_text = re.sub(r"^```json\s*", "", res_text)
+
+        res_text = re.sub(r"^```\s*", "", res_text)
+
+        res_text = re.sub(r"\s*```$", "", res_text)
+
+        
+
+        ai_result = json.loads(res_text)
+
+        
+
+        # 3. 결과를 캐시에 저장
+
+        QT_CACHE[reference] = ai_result
+
+        save_cache()
+
+        
+
+        return {
+
+            "reference": reference,
+
+            "verse": verse_text,
+
+            "exposition": ai_result.get("exposition", ""),
+
+            "questions": ai_result.get("questions", []),
+
+            "prayer": ai_result.get("prayer", "")
+
+        }
+
+    except Exception as e:
+
+        err_msg = str(e)
+
+        print("Gemini API Error:", err_msg)
+
+        return {
+
+            "reference": reference,
+
+            "verse": verse_text,
+
+            "exposition": f"Gemini API 호출 중 에러 발생: {err_msg}",
+
+            "questions": ["Render의 API 키를 확인해 주세요.", "Google AI Studio 할당량을 확인해 주세요."],
+
+            "prayer": "오류가 해결되면 실시간 맞춤 묵상이 출력됩니다."
+
+        }
