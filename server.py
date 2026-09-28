@@ -1,6 +1,7 @@
 import os
 import json
 import random
+import re
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import google.generativeai as genai
@@ -14,11 +15,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-
-# 영어 성경 이름을 한글 성경 이름으로 변환하는 매핑 (공백 제거 대응)
+# 영어 성경 이름을 한글 성경 이름으로 변환 매핑
 ENGLISH_TO_KOREAN = {
     "Genesis": "창세기", "Exodus": "출애굽기", "Leviticus": "레위기", "Numbers": "민수기", "Deuteronomy": "신명기",
     "Joshua": "여호수아", "Judges": "사사기", "Ruth": "룻기", 
@@ -42,7 +39,6 @@ ENGLISH_TO_KOREAN = {
 
 BIBLE_DATA = {}
 
-# bible.json 파싱 로직
 try:
     with open("bible.json", "r", encoding="utf-8") as f:
         raw_data = json.load(f)
@@ -73,7 +69,7 @@ def read_root():
 
 def get_random_bible_passage():
     if not BIBLE_DATA:
-        return "요한복음 3:16", "16절: 하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니 이는 그를 믿는 자마다 멸망하지 않고 영생을 얻게 하려 하심이라"
+        return "요한복음 3:16", "16절: 하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니..."
 
     book = random.choice(list(BIBLE_DATA.keys()))
     chapter = random.choice(list(BIBLE_DATA[book].keys()))
@@ -86,10 +82,7 @@ def get_random_bible_passage():
     verse_numbers.sort()
     max_v = max(verse_numbers)
     
-    # 평균 10절 내외(8~12절) 추출
     target_count = random.randint(8, 12)
-    
-    # 장의 맨 끝절이 시작점으로 잡혀서 1~2절만 추출되는 것을 방지
     valid_starts = [v for v in verse_numbers if max_v - v + 1 >= 6]
     if not valid_starts:
         valid_starts = verse_numbers
@@ -112,47 +105,82 @@ def get_random_bible_passage():
 async def get_daily_qt():
     reference, verse_text = get_random_bible_passage()
     
-    model = genai.GenerativeModel("gemini-1.5-flash")
-    
-    prompt = f"""
-    당신은 친절한 성경 묵상 도우미입니다. 
-    아래 주어진 [성경 구절]을 읽고, 요구사항에 맞춰 답변을 작성해 주세요.
-
-    [성경 구절]
-    구절 위치: {reference}
-    본문 내용:
-    {verse_text}
-
-    [요구사항]
-    다른 추가 설명 없이 오직 아래 JSON 형식을 그대로 지켜서 응답하세요:
-    {{
-      "exposition": "이 말씀이 주는 핵심 메시지와 현대적 의미 (3-4문장으로 친절하게 설명)",
-      "questions": [
-        "오늘 나의 삶을 돌아볼 첫 번째 질문",
-        "일상에서 실천할 수 있는 두 번째 질문"
-      ],
-      "prayer": "오늘 하루를 시작하거나 마무리할 때 드릴 따뜻한 기도문"
-    }}
-    """
-    
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return {
+            "reference": reference,
+            "verse": verse_text,
+            "exposition": "GEMINI_API_KEY 환경 변수가 설정되지 않았습니다.",
+            "questions": ["Render 환경 변수를 확인해주세요.", "API Key 설정을 확인해주세요."],
+            "prayer": "서버 환경변수 설정이 필요합니다."
+        }
+        
     try:
+        genai.configure(api_key=api_key)
+        
+        # JSON 응답 형식 지정
+        generation_config = genai.GenerationConfig(
+            response_mime_type="application/json",
+            temperature=0.7
+        )
+        
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            generation_config=generation_config
+        )
+        
+        prompt = f"""
+        당신은 신학적 깊이와 따뜻한 마음을 가진 성경 묵상 가이드입니다.
+        아래 주어진 [성경 구절]을 직접 읽고 분석하여, '이 본문 내용에만 들어맞는' 맞춤형 QT 해설, 질문, 기도문을 작성하세요.
+
+        [성경 구절]
+        구절 위치: {reference}
+        본문 내용:
+        {verse_text}
+
+        [작성 조건]
+        1. exposition: 위 성경 구절의 핵심 메시지와 구체적 의미를 3-4문장으로 따뜻하게 해석하세요.
+        2. questions: 위 성경 구절에 등장하는 인물, 배경, 메시지와 직접 관련된 질문 2가지를 작성하세요.
+        3. prayer: 위 성경 구절의 메시지를 담아 하나님께 드리는 결단의 기도문을 작성하세요.
+
+        다음 JSON 구조로만 응답하세요:
+        {{
+          "exposition": "성경 구절 해설",
+          "questions": [
+            "본문 맞춤 질문 1",
+            "본문 맞춤 질문 2"
+          ],
+          "prayer": "본문 맞춤 기도문"
+        }}
+        """
+        
         response = model.generate_content(prompt)
-        cleaned_json = response.text.replace("```json", "").replace("```", "").strip()
-        ai_result = json.loads(cleaned_json)
+        
+        # 응답 텍스트 정제
+        res_text = response.text.strip()
+        res_text = re.sub(r"^```json\s*", "", res_text)
+        res_text = re.sub(r"^```\s*", "", res_text)
+        res_text = re.sub(r"\s*```$", "", res_text)
+        
+        ai_result = json.loads(res_text)
         
         return {
             "reference": reference,
             "verse": verse_text,
-            "exposition": ai_result.get("exposition"),
-            "questions": ai_result.get("questions"),
-            "prayer": ai_result.get("prayer")
+            "exposition": ai_result.get("exposition", ""),
+            "questions": ai_result.get("questions", []),
+            "prayer": ai_result.get("prayer", "")
         }
     except Exception as e:
-        print("AI generation error:", e)
+        err_msg = str(e)
+        print("Gemini API Error:", err_msg)
         return {
             "reference": reference,
             "verse": verse_text,
-            "exposition": f"'{reference}' 말씀에 담긴 뜻을 깊이 묵상해 보세요.",
-            "questions": ["오늘 말씀에서 가장 마음에 와닿은 단어는 무엇인가요?", "오늘 이 말씀을 내 삶에 어떻게 적용할 수 있을까요?"],
-            "prayer": "주님, 오늘 주신 말씀을 마음에 품고 살아가게 하옵소서. 예수님의 이름으로 기도합니다. 아멘."
+            "exposition": f"Gemini API 호출 중 에러 발생: {err_msg}",
+            "questions": [
+                "Render의 API 키가 올바른지 확인해주세요.",
+                "Google AI Studio 할당량을 확인해주세요."
+            ],
+            "prayer": "오류가 해결되면 실시간 맞춤 묵상이 출력됩니다."
         }
