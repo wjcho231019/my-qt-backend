@@ -7,7 +7,6 @@ import google.generativeai as genai
 
 app = FastAPI()
 
-# Vercel 프론트엔드 통신 허용 (CORS)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -19,39 +18,83 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# 1. bible.json 로드 및 데이터 구조 통일
+# 영어 성경 이름을 한글 성경 이름으로 변환하는 매핑
+ENGLISH_TO_KOREAN = {
+    "Genesis": "창세기", "Exodus": "출애굽기", "Leviticus": "레위기", "Numbers": "민수기", "Deuteronomy": "신명기",
+    "Joshua": "여호수아", "Judges": "사사기", "Ruth": "룻기", "1 Samuel": "사무엘상", "2 Samuel": "사무엘하",
+    "1 Kings": "열왕기상", "2 Kings": "열왕기하", "1 Chronicles": "역대상", "2 Chronicles": "역대하",
+    "Ezra": "에스라", "Nehemiah": "느헤미야", "Esther": "에스더", "Job": "욥기", "Psalms": "시편", "Psalm": "시편",
+    "Proverbs": "잠언", "Ecclesiastes": "전도서", "Song of Solomon": "아가", "Song of Songs": "아가",
+    "Isaiah": "이사야", "Jeremiah": "예레미야", "Lamentations": "예레미야애가", "Ezekiel": "에스겔", "Daniel": "다니엘",
+    "Hosea": "호세아", "Joel": "요엘", "Amos": "아모스", "Obadiah": "오바다", "Jonah": "요나", "Micah": "미가",
+    "Nahum": "나훔", "Habakkuk": "하박국", "Zephaniah": "스파냐", "Haggai": "학개", "Zechariah": "스카리아", "Malachi": "말라기",
+    "Matthew": "마태복음", "Mark": "마가복음", "Luke": "누가복음", "John": "요한복음", "Acts": "사도행전",
+    "Romans": "로마서", "1 Corinthians": "고린도전서", "2 Corinthians": "고린도후서", "Galatians": "갈라디아서",
+    "Ephesians": "에베소서", "Philippians": "빌립보서", "Colossians": "골로새서", "1 Thessalonians": "데살로니가전서",
+    "2 Thessalonians": "데살로니가후서", "1 Timothy": "디모데전서", "2 Timothy": "디모데후서", "Titus": "디도서",
+    "Philemon": "빌레몬서", "Hebrews": "히브리서", "James": "야고보서", "1 Peter": "베드로전서", "2 Peter": "베드로후서",
+    "1 John": "요한1서", "2 John": "요한2서", "3 John": "요한3서", "Jude": "유다서", "Revelation": "요한계시록"
+}
+
 BIBLE_DATA = {}
 
+# 다양한 JSON 데이터 구조 대응 로직
 with open("bible.json", "r", encoding="utf-8") as f:
     raw_data = json.load(f)
 
-# JSON 형식이 배열/객체 어떤 형태든 대응
 if isinstance(raw_data, list):
     for item in raw_data:
-        book_name = item.get("name") or item.get("book") or "성경"
+        raw_book = item.get("name") or item.get("book") or "성경"
+        book_name = ENGLISH_TO_KOREAN.get(raw_book, raw_book)
         chapters = item.get("chapters", [])
+        
         BIBLE_DATA[book_name] = {}
-        for c_idx, verses in enumerate(chapters):
+        for c_idx, ch_data in enumerate(chapters):
             c_num = str(c_idx + 1)
+            
+            # {"chapter": 18, "verses": [...]} 형태 대응
+            if isinstance(ch_data, dict):
+                if "chapter" in ch_data:
+                    c_num = str(ch_data["chapter"])
+                verses_list = ch_data.get("verses", [])
+            else:
+                verses_list = ch_data
+                
             BIBLE_DATA[book_name][c_num] = {}
-            for v_idx, verse_text in enumerate(verses):
-                v_num = str(v_idx + 1)
-                BIBLE_DATA[book_name][c_num][v_num] = verse_text
+            if isinstance(verses_list, list):
+                for v_idx, v_text in enumerate(verses_list):
+                    BIBLE_DATA[book_name][c_num][str(v_idx + 1)] = str(v_text)
+            elif isinstance(verses_list, dict):
+                for v_key, v_text in verses_list.items():
+                    BIBLE_DATA[book_name][c_num][str(v_key)] = str(v_text)
+
 elif isinstance(raw_data, dict):
-    BIBLE_DATA = raw_data
+    for raw_book, ch_dict in raw_data.items():
+        book_name = ENGLISH_TO_KOREAN.get(raw_book, raw_book)
+        BIBLE_DATA[book_name] = {}
+        if isinstance(ch_dict, dict):
+            for c_num, v_dict in ch_dict.items():
+                BIBLE_DATA[book_name][str(c_num)] = {}
+                if isinstance(v_dict, dict):
+                    for v_num, v_text in v_dict.items():
+                        BIBLE_DATA[book_name][str(c_num)][str(v_num)] = str(v_text)
+                elif isinstance(v_dict, list):
+                    for v_idx, v_text in enumerate(v_dict):
+                        BIBLE_DATA[book_name][str(c_num)][str(v_idx + 1)] = str(v_text)
 
 def get_random_bible_passage():
-    """파이썬에서 랜덤으로 책, 장, 절을 추출하는 함수"""
     book = random.choice(list(BIBLE_DATA.keys()))
     chapter = random.choice(list(BIBLE_DATA[book].keys()))
     verses_dict = BIBLE_DATA[book][chapter]
     
-    verse_numbers = [int(v) for v in verses_dict.keys()]
+    verse_numbers = [int(v) for v in verses_dict.keys() if v.isdigit()]
+    if not verse_numbers:
+        return "요한복음 3:16", "16절: 하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니..."
+        
     verse_numbers.sort()
     
-    # 연속된 3~5개 절 추출
     start_v = random.choice(verse_numbers)
-    end_v = min(start_v + random.randint(2, 4), max(verse_numbers))
+    end_v = min(start_v + random.randint(1, 3), max(verse_numbers))
     
     passage_text = []
     for v_num in range(start_v, end_v + 1):
@@ -59,7 +102,7 @@ def get_random_bible_passage():
         if text:
             passage_text.append(f"{v_num}절: {text}")
             
-    reference = f"{book} {chapter}:{start_v}-{end_v}"
+    reference = f"{book} {chapter}:{start_v}" if start_v == end_v else f"{book} {chapter}:{start_v}-{end_v}"
     full_text = "\n".join(passage_text)
     
     return reference, full_text
@@ -104,10 +147,11 @@ async def get_daily_qt():
             "prayer": ai_result.get("prayer")
         }
     except Exception as e:
+        print("AI generation error:", e)
         return {
             "reference": reference,
             "verse": verse_text,
-            "exposition": "말씀을 묵상하며 마음속에 주시는 메시지를 생각해보세요.",
-            "questions": ["오늘 말씀에서 가장 마음에 와닿은 단어는 무엇인가요?", "오늘 누구에게 사랑을 전할 수 있을까요?"],
+            "exposition": f"'{reference}' 말씀에 담긴 뜻을 깊이 묵상해 보세요.",
+            "questions": ["오늘 말씀에서 가장 마음에 와닿은 단어는 무엇인가요?", "오늘 이 말씀을 내 삶에 어떻게 적용할 수 있을까요?"],
             "prayer": "주님, 오늘 주신 말씀을 마음에 품고 살아가게 하옵소서. 예수님의 이름으로 기도합니다. 아멘."
         }
