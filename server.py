@@ -38,7 +38,25 @@ ENGLISH_TO_KOREAN = {
 }
 
 BIBLE_DATA = {}
+QT_CACHE = {}
+CACHE_FILE = "qt_cache.json"
 
+# 캐시 파일 불러오기
+if os.path.exists(CACHE_FILE):
+    try:
+        with open(CACHE_FILE, "r", encoding="utf-8") as f:
+            QT_CACHE = json.load(f)
+    except Exception:
+        QT_CACHE = {}
+
+def save_cache():
+    try:
+        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+            json.dump(QT_CACHE, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print("Cache save error:", e)
+
+# bible.json 데이터 로드
 try:
     with open("bible.json", "r", encoding="utf-8") as f:
         raw_data = json.load(f)
@@ -105,6 +123,19 @@ def get_random_bible_passage():
 async def get_daily_qt():
     reference, verse_text = get_random_bible_passage()
     
+    # 1. 이미 해석해 둔 구절(캐시)이 있는지 확인
+    if reference in QT_CACHE:
+        print(f"[Cache Hit] '{reference}' - 기존 생성된 해석을 재사용합니다.")
+        cached_data = QT_CACHE[reference]
+        return {
+            "reference": reference,
+            "verse": verse_text,
+            "exposition": cached_data.get("exposition"),
+            "questions": cached_data.get("questions"),
+            "prayer": cached_data.get("prayer")
+        }
+
+    # 2. 캐시에 없으면 제미나이 API 호출
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
         return {
@@ -118,7 +149,6 @@ async def get_daily_qt():
     try:
         genai.configure(api_key=api_key)
         
-        # JSON 응답 형식 지정
         generation_config = genai.GenerationConfig(
             response_mime_type="application/json",
             temperature=0.7
@@ -156,13 +186,16 @@ async def get_daily_qt():
         
         response = model.generate_content(prompt)
         
-        # 응답 텍스트 정제
         res_text = response.text.strip()
         res_text = re.sub(r"^```json\s*", "", res_text)
         res_text = re.sub(r"^```\s*", "", res_text)
         res_text = re.sub(r"\s*```$", "", res_text)
         
         ai_result = json.loads(res_text)
+        
+        # 3. 결과를 캐시에 저장
+        QT_CACHE[reference] = ai_result
+        save_cache()
         
         return {
             "reference": reference,
@@ -178,9 +211,6 @@ async def get_daily_qt():
             "reference": reference,
             "verse": verse_text,
             "exposition": f"Gemini API 호출 중 에러 발생: {err_msg}",
-            "questions": [
-                "Render의 API 키가 올바른지 확인해주세요.",
-                "Google AI Studio 할당량을 확인해주세요."
-            ],
+            "questions": ["Render의 API 키를 확인해 주세요.", "Google AI Studio 할당량을 확인해 주세요."],
             "prayer": "오류가 해결되면 실시간 맞춤 묵상이 출력됩니다."
         }
