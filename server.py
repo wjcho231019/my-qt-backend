@@ -18,76 +18,69 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
-# 영어 성경 이름을 한글 성경 이름으로 변환하는 매핑
+# 영어 성경 이름을 한글 성경 이름으로 변환하는 매핑 (공백 제거 대응)
 ENGLISH_TO_KOREAN = {
     "Genesis": "창세기", "Exodus": "출애굽기", "Leviticus": "레위기", "Numbers": "민수기", "Deuteronomy": "신명기",
-    "Joshua": "여호수아", "Judges": "사사기", "Ruth": "룻기", "1 Samuel": "사무엘상", "2 Samuel": "사무엘하",
-    "1 Kings": "열왕기상", "2 Kings": "열왕기하", "1 Chronicles": "역대상", "2 Chronicles": "역대하",
-    "Ezra": "에스라", "Nehemiah": "느헤미야", "Esther": "에스더", "Job": "욥기", "Psalms": "시편", "Psalm": "시편",
-    "Proverbs": "잠언", "Ecclesiastes": "전도서", "Song of Solomon": "아가", "Song of Songs": "아가",
-    "Isaiah": "이사야", "Jeremiah": "예레미야", "Lamentations": "예레미야애가", "Ezekiel": "에스겔", "Daniel": "다니엘",
-    "Hosea": "호세아", "Joel": "요엘", "Amos": "아모스", "Obadiah": "오바다", "Jonah": "요나", "Micah": "미가",
-    "Nahum": "나훔", "Habakkuk": "하박국", "Zephaniah": "스파냐", "Haggai": "학개", "Zechariah": "스카리아", "Malachi": "말라기",
-    "Matthew": "마태복음", "Mark": "마가복음", "Luke": "누가복음", "John": "요한복음", "Acts": "사도행전",
-    "Romans": "로마서", "1 Corinthians": "고린도전서", "2 Corinthians": "고린도후서", "Galatians": "갈라디아서",
-    "Ephesians": "에베소서", "Philippians": "빌립보서", "Colossians": "골로새서", "1 Thessalonians": "데살로니가전서",
-    "2 Thessalonians": "데살로니가후서", "1 Timothy": "디모데전서", "2 Timothy": "디모데후서", "Titus": "디도서",
-    "Philemon": "빌레몬서", "Hebrews": "히브리서", "James": "야고보서", "1 Peter": "베드로전서", "2 Peter": "베드로후서",
-    "1 John": "요한1서", "2 John": "요한2서", "3 John": "요한3서", "Jude": "유다서", "Revelation": "요한계시록"
+    "Joshua": "여호수아", "Judges": "사사기", "Ruth": "룻기", 
+    "1Samuel": "사무엘상", "2Samuel": "사무엘하", "1Kings": "열왕기상", "2Kings": "열왕기하", 
+    "1Chronicles": "역대상", "2Chronicles": "역대하", "Ezra": "에스라", "Nehemiah": "느헤미야", 
+    "Esther": "에스더", "Job": "욥기", "Psalms": "시편", "Psalm": "시편", "Proverbs": "잠언", 
+    "Ecclesiastes": "전도서", "SongofSolomon": "아가", "SongofSongs": "아가", "Isaiah": "이사야", 
+    "Jeremiah": "예레미야", "Lamentations": "예레미야애가", "Ezekiel": "에스겔", "Daniel": "다니엘", 
+    "Hosea": "호세아", "Joel": "요엘", "Amos": "아모스", "Obadiah": "오바다", "Jonah": "요나", 
+    "Micah": "미가", "Nahum": "나훔", "Habakkuk": "하박국", "Zephaniah": "스파냐", "Haggai": "학개", 
+    "Zechariah": "스카리아", "Malachi": "말라기", "Matthew": "마태복음", "Mark": "마가복음", 
+    "Luke": "누가복음", "John": "요한복음", "Acts": "사도행전", "Romans": "로마서", 
+    "1Corinthians": "고린도전서", "2Corinthians": "고린도후서", "Galatians": "갈라디아서", 
+    "Ephesians": "에베소서", "Philippians": "빌립보서", "Colossians": "골로새서", 
+    "1Thessalonians": "데살로니가전서", "2Thessalonians": "데살로니가후서", 
+    "1Timothy": "디모데전서", "2Timothy": "디모데후서", "Titus": "디도서", 
+    "Philemon": "빌레몬서", "Hebrews": "히브리서", "James": "야고보서", 
+    "1Peter": "베드로전서", "2Peter": "베드로후서", "1John": "요한1서", 
+    "2John": "요한2서", "3John": "요한3서", "Jude": "유다서", "Revelation": "요한계시록"
 }
 
 BIBLE_DATA = {}
 
-# 다양한 JSON 데이터 구조 대응 로직
-with open("bible.json", "r", encoding="utf-8") as f:
-    raw_data = json.load(f)
+# bible.json 파싱 로직
+try:
+    with open("bible.json", "r", encoding="utf-8") as f:
+        raw_data = json.load(f)
 
-if isinstance(raw_data, list):
-    for item in raw_data:
-        raw_book = item.get("name") or item.get("book") or "성경"
-        book_name = ENGLISH_TO_KOREAN.get(raw_book, raw_book)
-        chapters = item.get("chapters", [])
+    for book_item in raw_data:
+        raw_book = str(book_item.get("book", ""))
+        # 공백 제거 후 한글 매핑 찾기
+        clean_key = raw_book.replace(" ", "")
+        book_name = ENGLISH_TO_KOREAN.get(clean_key, raw_book)
         
-        BIBLE_DATA[book_name] = {}
-        for c_idx, ch_data in enumerate(chapters):
-            c_num = str(c_idx + 1)
+        if book_name not in BIBLE_DATA:
+            BIBLE_DATA[book_name] = {}
             
-            # {"chapter": 18, "verses": [...]} 형태 대응
-            if isinstance(ch_data, dict):
-                if "chapter" in ch_data:
-                    c_num = str(ch_data["chapter"])
-                verses_list = ch_data.get("verses", [])
-            else:
-                verses_list = ch_data
+        for ch_item in book_item.get("chapters", []):
+            ch_num = str(ch_item.get("chapter", ""))
+            if ch_num not in BIBLE_DATA[book_name]:
+                BIBLE_DATA[book_name][ch_num] = {}
                 
-            BIBLE_DATA[book_name][c_num] = {}
-            if isinstance(verses_list, list):
-                for v_idx, v_text in enumerate(verses_list):
-                    BIBLE_DATA[book_name][c_num][str(v_idx + 1)] = str(v_text)
-            elif isinstance(verses_list, dict):
-                for v_key, v_text in verses_list.items():
-                    BIBLE_DATA[book_name][c_num][str(v_key)] = str(v_text)
+            for v_item in ch_item.get("verses", []):
+                v_num = str(v_item.get("verse", ""))
+                v_text = str(v_item.get("text", ""))
+                BIBLE_DATA[book_name][ch_num][v_num] = v_text
+except Exception as e:
+    print("JSON Load Error:", e)
 
-elif isinstance(raw_data, dict):
-    for raw_book, ch_dict in raw_data.items():
-        book_name = ENGLISH_TO_KOREAN.get(raw_book, raw_book)
-        BIBLE_DATA[book_name] = {}
-        if isinstance(ch_dict, dict):
-            for c_num, v_dict in ch_dict.items():
-                BIBLE_DATA[book_name][str(c_num)] = {}
-                if isinstance(v_dict, dict):
-                    for v_num, v_text in v_dict.items():
-                        BIBLE_DATA[book_name][str(c_num)][str(v_num)] = str(v_text)
-                elif isinstance(v_dict, list):
-                    for v_idx, v_text in enumerate(v_dict):
-                        BIBLE_DATA[book_name][str(c_num)][str(v_idx + 1)] = str(v_text)
+@app.get("/")
+def read_root():
+    return {"status": "QT Backend Server is Running!"}
 
 def get_random_bible_passage():
+    if not BIBLE_DATA:
+        return "요한복음 3:16", "16절: 하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니 이는 그를 믿는 자마다 멸망하지 않고 영생을 얻게 하려 하심이라"
+
     book = random.choice(list(BIBLE_DATA.keys()))
     chapter = random.choice(list(BIBLE_DATA[book].keys()))
     verses_dict = BIBLE_DATA[book][chapter]
     
-    verse_numbers = [int(v) for v in verses_dict.keys() if v.isdigit()]
+    verse_numbers = [int(v) for v in verses_dict.keys() if str(v).isdigit()]
     if not verse_numbers:
         return "요한복음 3:16", "16절: 하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니..."
         
