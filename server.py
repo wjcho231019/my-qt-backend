@@ -49,7 +49,6 @@ try:
 
     for book_item in raw_data:
         raw_book = str(book_item.get("book", ""))
-        # 공백 제거 후 한글 매핑 찾기
         clean_key = raw_book.replace(" ", "")
         book_name = ENGLISH_TO_KOREAN.get(clean_key, raw_book)
         
@@ -85,9 +84,18 @@ def get_random_bible_passage():
         return "요한복음 3:16", "16절: 하나님이 세상을 이처럼 사랑하사 독생자를 주셨으니..."
         
     verse_numbers.sort()
+    max_v = max(verse_numbers)
     
-    start_v = random.choice(verse_numbers)
-    end_v = min(start_v + random.randint(1, 3), max(verse_numbers))
+    # 평균 10절 내외(8~12절) 추출
+    target_count = random.randint(8, 12)
+    
+    # 장의 맨 끝절이 시작점으로 잡혀서 1~2절만 추출되는 것을 방지
+    valid_starts = [v for v in verse_numbers if max_v - v + 1 >= 6]
+    if not valid_starts:
+        valid_starts = verse_numbers
+        
+    start_v = random.choice(valid_starts)
+    end_v = min(start_v + target_count - 1, max_v)
     
     passage_text = []
     for v_num in range(start_v, end_v + 1):
