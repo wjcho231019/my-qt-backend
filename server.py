@@ -234,6 +234,9 @@ async def get_daily_qt(topic: Optional[str] = Query(None)):
             res_text = re.sub(r"^```\s*", "", res_text)
             res_text = re.sub(r"\s*```$", "", res_text)
 
+            # ⬇️ 아래 한 줄을 새로 추가하세요! (불필요한 쉼표 제거)
+            res_text = re.sub(r',\s*([\]}])', r'\1', res_text)
+
             ai_result = json.loads(res_text)
 
             return {
@@ -325,6 +328,9 @@ async def get_daily_qt(topic: Optional[str] = Query(None)):
         res_text = re.sub(r"^```json\s*", "", res_text)
         res_text = re.sub(r"^```\s*", "", res_text)
         res_text = re.sub(r"\s*```$", "", res_text)
+
+        # ⬇️ 아래 한 줄을 새로 추가하세요! (불필요한 쉼표 제거)
+        res_text = re.sub(r',\s*([\]}])', r'\1', res_text)
         
         ai_result = json.loads(res_text)
         
