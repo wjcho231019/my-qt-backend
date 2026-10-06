@@ -352,13 +352,20 @@ def select_daily_passage_by_ai(
 }}
 """
 
-    # AI가 잘못된 장절을 선택할 가능성에 대비하여 최대 3번 검증
+    # AI가 잘못된 장절을 선택할 가능성에 대비하여 최대 2번 검증
     last_error = None
 
-    for attempt in range(3):
+    for attempt in range(2):
 
         try:
-            response = model.generate_content(prompt)
+            print("[Gemini 1/2] 오늘의 본문 선정 요청 시작")
+
+            response = model.generate_content(
+                prompt,
+                request_options={"timeout": 25}
+            )
+
+            print("[Gemini 1/2] 오늘의 본문 선정 응답 완료")
 
             res_text = response.text.strip()
 
@@ -466,7 +473,14 @@ async def get_daily_qt(
             }}
             """
 
-            response = model.generate_content(prompt)
+            print("[Gemini 1/2] 오늘의 본문 선정 요청 시작")
+
+            response = model.generate_content(
+                prompt,
+                request_options={"timeout": 25}
+            )
+
+            print("[Gemini 1/2] 오늘의 본문 선정 응답 완료")
             res_text = response.text.strip()
             res_text = re.sub(r"^```json\s*", "", res_text)
             res_text = re.sub(r"^```\s*", "", res_text)
@@ -656,7 +670,14 @@ async def get_daily_qt(
 }}
 """
 
-        response = model.generate_content(prompt)
+        print("[Gemini 2/2] QT 해설 생성 요청 시작")
+
+        response = model.generate_content(
+            prompt,
+            request_options={"timeout": 30}
+        )
+
+        print("[Gemini 2/2] QT 해설 생성 응답 완료")
 
         res_text = response.text.strip()
 
