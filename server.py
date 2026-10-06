@@ -697,12 +697,19 @@ async def get_daily_qt(
         # 변경:
         # QT_CACHE["2026-10-06"]
         # ---------------------------------------------------------
+        raw_questions = ai_result.get("questions", [])
+
+        if not isinstance(raw_questions, list):
+            raw_questions = []
+
+        clean_questions = raw_questions[:2]
+
         daily_result = {
             "date": today_date,
             "reference": reference,
             "verse": verse_text,
             "exposition": ai_result.get("exposition", ""),
-            "questions": ai_result.get("questions", []),
+            "questions": clean_questions,
             "prayer": ai_result.get("prayer", "")
         }
 
