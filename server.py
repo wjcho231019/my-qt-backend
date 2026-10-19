@@ -136,7 +136,7 @@ try:
 except Exception as e:
     print("JSON Load Error:", e)
 
-@app.get("/")
+@app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
     return {"status": "QT Backend Server is Running!"}
 
